@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="re3generic/re3generic.vcxproj" Id="e3e22b98-6c81-4404-84ca-6e4f7bd484c3" />
+  <Project Path="re3generic/re3librw.vcxproj" Id="790dbbd7-465a-4c56-9ebd-b2dca0a32752" />
+  <Project Path="re3generic/re3game.vcxproj" Id="cbdb950e-79d0-4659-8456-3e2637890318" />
+  <Project Path="re3generic/re3host.vcxproj" Id="f3de5b3d-91f7-47bb-827b-26b62f8ab412" />
+</Solution>

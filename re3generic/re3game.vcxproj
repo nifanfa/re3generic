@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion><ProjectGuid>{CBDB950E-79D0-4659-8456-3E2637890318}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword><RootNamespace>re3game</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset><CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset><CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)obj\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel><LanguageStandard>stdcpp14</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>$(ProjectDir)vendor\re3-symbian\src;$(ProjectDir)vendor\re3-symbian\src\animation;$(ProjectDir)vendor\re3-symbian\src\audio;$(ProjectDir)vendor\re3-symbian\src\buildings;$(ProjectDir)vendor\re3-symbian\src\collision;$(ProjectDir)vendor\re3-symbian\src\control;$(ProjectDir)vendor\re3-symbian\src\core;$(ProjectDir)vendor\re3-symbian\src\entities;$(ProjectDir)vendor\re3-symbian\src\extras;$(ProjectDir)vendor\re3-symbian\src\fakerw;$(ProjectDir)vendor\re3-symbian\src\math;$(ProjectDir)vendor\re3-symbian\src\modelinfo;$(ProjectDir)vendor\re3-symbian\src\objects;$(ProjectDir)vendor\re3-symbian\src\peds;$(ProjectDir)vendor\re3-symbian\src\renderer;$(ProjectDir)vendor\re3-symbian\src\rw;$(ProjectDir)vendor\re3-symbian\src\save;$(ProjectDir)vendor\re3-symbian\src\skel;$(ProjectDir)vendor\re3-symbian\src\text;$(ProjectDir)vendor\re3-symbian\src\vehicles;$(ProjectDir)vendor\re3-symbian\src\weapons;$(ProjectDir)vendor\re3-symbian\vendor\librw;$(ProjectDir)vendor\re3-symbian\vendor\librw\src;$(ProjectDir)vendor\vincent\include;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NOMINMAX;LIBRW;RW_GLES1;RE3_GENERIC;STATIC_GLES;MASTER;NO_AUDIO;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="vendor\re3-symbian\src\**\*.cpp" Exclude="vendor\re3-symbian\src\core\CdStream.cpp;vendor\re3-symbian\src\core\CdStreamPosix.cpp;vendor\re3-symbian\src\skel\win\**;vendor\re3-symbian\src\skel\symbian\**;vendor\re3-symbian\src\skel\glfw\**;vendor\re3-symbian\src\audio\oal\**;vendor\re3-symbian\src\audio\eax\**;vendor\re3-symbian\src\audio\sampman_miles.cpp;vendor\re3-symbian\src\audio\sampman_oal.cpp;vendor\re3-symbian\src\audio\sampman_symbian.cpp" />
+    <ClCompile Include="integration\CdStreamGeneric.cpp" />
+    <ClCompile Include="integration\GenericPlatform.cpp" />
+    <ClCompile Include="integration\GenericGame.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
