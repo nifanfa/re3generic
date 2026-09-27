@@ -1,5 +1,7 @@
 #include "stdafx.h"
 #include "Surface.h"
+#include "Simd.h"
+#include "GlesProfile.h"
 
 namespace EGL {
 
@@ -31,38 +33,46 @@ void Surface::Dispose()
 
 void Surface::ClearDepthBuffer(U32 depth, bool mask, const Rect &scissor)
 {
+    RG_ProfileScope scope(rg_gles_profile ? &rg_gles_profile->clear_ns : 0);
     if (!mask)
         return;
     Rect clipped = Rect::Intersect(m_Rect, scissor);
+    if (clipped.width <= 0 || clipped.height <= 0)
+        return;
+    const RG_SimdOps &operations = rg_simd_ops();
     for (int row = clipped.y; row < clipped.y + clipped.height; ++row)
-        for (int col = clipped.x; col < clipped.x + clipped.width; ++col)
-            m_DepthBuffer[row * m_Rect.width + col] = depth;
+        operations.clear32(m_DepthBuffer + row * m_Rect.width + clipped.x,
+                           clipped.width, depth, UINT32_MAX);
 }
 
 void Surface::ClearStencilBuffer(U32 value, U32 mask, const Rect &scissor)
 {
+    RG_ProfileScope scope(rg_gles_profile ? &rg_gles_profile->clear_ns : 0);
     Rect clipped = Rect::Intersect(m_Rect, scissor);
+    if (clipped.width <= 0 || clipped.height <= 0)
+        return;
+    const RG_SimdOps &operations = rg_simd_ops();
     for (int row = clipped.y; row < clipped.y + clipped.height; ++row)
-        for (int col = clipped.x; col < clipped.x + clipped.width; ++col) {
-            U32 &pixel = m_StencilBuffer[row * m_Rect.width + col];
-            pixel = (pixel & ~mask) | (value & mask);
-        }
+        operations.clear32(m_StencilBuffer + row * m_Rect.width + clipped.x,
+                           clipped.width, value, mask);
 }
 
 void Surface::ClearColorBuffer(const Color &rgba, const Color &mask,
                                const Rect &scissor)
 {
+    RG_ProfileScope scope(rg_gles_profile ? &rg_gles_profile->clear_ns : 0);
     U16 color = rgba.ConvertTo565();
     U16 color_mask = mask.ConvertTo565();
     Rect clipped = Rect::Intersect(m_Rect, scissor);
-    for (int row = clipped.y; row < clipped.y + clipped.height; ++row)
-        for (int col = clipped.x; col < clipped.x + clipped.width; ++col) {
-            int index = row * m_Rect.width + col;
-            U16 &pixel = m_ColorBuffer[index];
-            pixel = (pixel & ~color_mask) | (color & color_mask);
-            if (mask.A())
-                m_AlphaBuffer[index] = rgba.A();
-        }
+    if (clipped.width <= 0 || clipped.height <= 0)
+        return;
+    const RG_SimdOps &operations = rg_simd_ops();
+    for (int row = clipped.y; row < clipped.y + clipped.height; ++row) {
+        int index = row * m_Rect.width + clipped.x;
+        operations.clear16(m_ColorBuffer + index, clipped.width, color, color_mask);
+        if (mask.A())
+            operations.fill8(m_AlphaBuffer + index, clipped.width, rgba.A());
+    }
 }
 
 }

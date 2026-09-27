@@ -21,5 +21,22 @@
     <ClCompile Include="src\stream.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="software\Simd.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="software\GlesProfile.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="software\SimdAvx2.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="software\Simd.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="software\GlesProfile.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

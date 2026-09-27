@@ -42,6 +42,9 @@
 #include <string.h>
 #include "fixed.h"
 #include "Surface.h"
+#ifdef RE3_GENERIC
+#include "GlesProfile.h"
+#endif
 
 
 using namespace EGL;
@@ -309,6 +312,10 @@ void Context :: Normal3x(GLfixed nx, GLfixed ny, GLfixed nz) {
 
 
 void Context :: DrawArrays(GLenum mode, GLint first, GLsizei count) { 
+#ifdef RE3_GENERIC
+	RG_ProfileScope scope(rg_gles_profile ? &rg_gles_profile->draw_ns : 0);
+	if (rg_gles_profile) { ++rg_gles_profile->draws; rg_gles_profile->vertices += count > 0 ? count : 0; }
+#endif
 
 	if (count < 0) {
 		RecordError(GL_INVALID_VALUE);
@@ -360,6 +367,10 @@ void Context :: DrawArrays(GLenum mode, GLint first, GLsizei count) {
 
 
 void Context :: DrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) { 
+#ifdef RE3_GENERIC
+	RG_ProfileScope scope(rg_gles_profile ? &rg_gles_profile->draw_ns : 0);
+	if (rg_gles_profile) { ++rg_gles_profile->draws; rg_gles_profile->vertices += count > 0 ? count : 0; }
+#endif
 	
 	if (count < 0) {
 		RecordError(GL_INVALID_VALUE);

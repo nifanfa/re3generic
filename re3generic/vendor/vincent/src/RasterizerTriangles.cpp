@@ -46,6 +46,10 @@
 #include "Surface.h"
 #include "Texture.h"
 #include "arm/FunctionCache.h"
+#ifdef RE3_GENERIC
+#include "Simd.h"
+#include "GlesProfile.h"
+#endif
 
 using namespace EGL;
 
@@ -216,6 +220,9 @@ void Rasterizer :: PrepareTriangle() {
 #if !EGL_USE_JIT
 
 inline void Rasterizer :: RasterScanLine(RasterInfo & rasterInfo, const EdgePos & start, const EdgePos & delta) {
+#ifdef RE3_GENERIC
+	RG_ProfileScope scope(rg_gles_profile ? &rg_gles_profile->scanline_ns : 0);
+#endif
 
 	// In the edge buffer, z, tu and tv are actually divided by w
 
@@ -224,6 +231,20 @@ inline void Rasterizer :: RasterScanLine(RasterInfo & rasterInfo, const EdgePos 
 	if (!(delta.m_WindowCoords.x - start.m_WindowCoords.x)) {
 		return;
 	}
+#ifdef RE3_GENERIC
+	const RG_SimdOps &simd = rg_simd_ops();
+	const I32 rowStart = EGL_IntFromFixed(start.m_WindowCoords.x);
+	const I32 rowEnd = EGL_IntFromFixed(delta.m_WindowCoords.x);
+	const I64 rowLastDepth = I64(start.m_WindowCoords.depth) + I64(delta.m_WindowCoords.depth) * (rowEnd - rowStart - 1);
+	if (simd.depth_visible && m_State->m_DepthTest.Enabled && !m_State->m_Stencil.Enabled &&
+		rowStart >= 0 && rowEnd <= rasterInfo.SurfaceWidth && rowEnd - rowStart >= LINEAR_SPAN &&
+		rowLastDepth >= INT_MIN && rowLastDepth <= INT_MAX &&
+		!simd.depth_visible(rasterInfo.DepthBuffer + rowStart, rowEnd - rowStart,
+			start.m_WindowCoords.depth, delta.m_WindowCoords.depth, m_State->m_DepthTest.Func)) {
+		if (rg_gles_profile) rg_gles_profile->culled_pixels += rowEnd - rowStart;
+		return;
+	}
+#endif
 
 	const FractionalColor& colorIncrement = delta.m_Color;
 
@@ -235,8 +256,8 @@ inline void Rasterizer :: RasterScanLine(RasterInfo & rasterInfo, const EdgePos 
 	size_t unit;
 	EGL_Fixed deltaInvU[EGL_NUM_TEXTURE_UNITS],
 		deltaInvV[EGL_NUM_TEXTURE_UNITS],
-		invTu[EGL_NUM_TEXTURE_UNITS],
-		invTv[EGL_NUM_TEXTURE_UNITS];
+		invTu[EGL_NUM_TEXTURE_UNITS] = {},
+		invTv[EGL_NUM_TEXTURE_UNITS] = {};
 
 #if EGL_MIPMAP_PER_TEXEL
 	EGL_Fixed deltaInvDu[EGL_NUM_TEXTURE_UNITS],
@@ -248,6 +269,8 @@ inline void Rasterizer :: RasterScanLine(RasterInfo & rasterInfo, const EdgePos 
 #endif
 
 	for (unit = 0; unit < EGL_NUM_TEXTURE_UNITS; ++unit) {
+		if (!rasterInfo.Textures[unit])
+			continue;
 		deltaInvU[unit] = delta.m_TextureCoords[unit].tu;
 		deltaInvV[unit] = delta.m_TextureCoords[unit].tv;
 
@@ -271,11 +294,49 @@ inline void Rasterizer :: RasterScanLine(RasterInfo & rasterInfo, const EdgePos 
 	I32 x = EGL_IntFromFixed(start.m_WindowCoords.x);
 	I32 xEnd = EGL_IntFromFixed(delta.m_WindowCoords.x);
 	I32 xLinEnd = x + ((xEnd - x) & ~(LINEAR_SPAN - 1));
+#ifdef RE3_GENERIC
+	bool batchSupported = simd.span8 && !m_State->m_Stencil.Enabled && !m_State->m_LogicOp.Enabled;
+	for (unit = 1; unit < EGL_NUM_TEXTURE_UNITS; ++unit)
+		if (m_State->m_Texture[unit].Enabled)
+			batchSupported = false;
+	if (m_State->m_Texture[0].Enabled) {
+		const RasterizerState::TextureState &textureState = m_State->m_Texture[0];
+		batchSupported = batchSupported && rasterInfo.Textures[0] &&
+			(textureState.Mode == RasterizerState::TextureModeModulate ||
+			 textureState.Mode == RasterizerState::TextureModeReplace) &&
+			(textureState.InternalFormat == RasterizerState::TextureFormatRGBA8 ||
+			 textureState.InternalFormat == RasterizerState::TextureFormatRGB565 ||
+			 textureState.InternalFormat == RasterizerState::TextureFormatRGBA4444 ||
+			 textureState.InternalFormat == RasterizerState::TextureFormatRGBA5551) &&
+			(textureState.MinFilterMode == RasterizerState::FilterModeNearest ||
+			 textureState.MinFilterMode == RasterizerState::FilterModeLinear);
+	}
+	if (m_State->m_ScissorTest.Enabled && m_State->m_ScissorTest.Width > INT_MAX)
+		batchSupported = false;
+	RG_Span8 span = {};
+	if (rg_gles_profile && xEnd > x) {
+		int format = m_State->m_Texture[0].Enabled ? m_State->m_Texture[0].InternalFormat : 8;
+		int mode = m_State->m_Texture[0].Enabled ? m_State->m_Texture[0].Mode : 6;
+		if (format >= 0 && format <= 8) rg_gles_profile->formats[format] += xEnd - x;
+		if (mode >= 0 && mode <= 6) rg_gles_profile->modes[mode] += xEnd - x;
+	}
+	span.state = m_State;
+	span.color_step[0] = colorIncrement.r;
+	span.color_step[1] = colorIncrement.g;
+	span.color_step[2] = colorIncrement.b;
+	span.depth_step = deltaDepth;
+	span.fog_step = deltaFog;
+#endif
 
-	EGL_Fixed z = EGL_Inverse(invZ);
-	EGL_Fixed tu[EGL_NUM_TEXTURE_UNITS], tv[EGL_NUM_TEXTURE_UNITS];
+	bool hasTexture = false;
+	for (unit = 0; unit < EGL_NUM_TEXTURE_UNITS; ++unit)
+		hasTexture = hasTexture || rasterInfo.Textures[unit] != 0;
+	EGL_Fixed z = hasTexture ? EGL_Inverse(invZ) : 0;
+	EGL_Fixed tu[EGL_NUM_TEXTURE_UNITS] = {}, tv[EGL_NUM_TEXTURE_UNITS] = {};
 
 	for (unit = 0; unit < EGL_NUM_TEXTURE_UNITS; ++unit) {
+		if (!rasterInfo.Textures[unit])
+			continue;
 		tu[unit] = EGL_Mul(invTu[unit], z);
 		tv[unit] = EGL_Mul(invTv[unit], z);
 	}
@@ -310,15 +371,17 @@ inline void Rasterizer :: RasterScanLine(RasterInfo & rasterInfo, const EdgePos 
 #endif
 
 		invZ += deltaInvZ << LOG_LINEAR_SPAN;
-		EGL_Fixed endZ = EGL_Inverse(invZ);
+		EGL_Fixed endZ = hasTexture ? EGL_Inverse(invZ) : 0;
 		EGL_Fixed deltaZ = (endZ - z) >> LOG_LINEAR_SPAN;
 
 		EGL_Fixed endTu[EGL_NUM_TEXTURE_UNITS];
 		EGL_Fixed endTv[EGL_NUM_TEXTURE_UNITS];
-		EGL_Fixed deltaTu[EGL_NUM_TEXTURE_UNITS];
-		EGL_Fixed deltaTv[EGL_NUM_TEXTURE_UNITS];
+		EGL_Fixed deltaTu[EGL_NUM_TEXTURE_UNITS] = {};
+		EGL_Fixed deltaTv[EGL_NUM_TEXTURE_UNITS] = {};
 
 		for (unit = 0; unit < EGL_NUM_TEXTURE_UNITS; ++unit) {
+			if (!rasterInfo.Textures[unit])
+				continue;
 			invTu[unit] += deltaInvU[unit] << LOG_LINEAR_SPAN;
 			invTv[unit] += deltaInvV[unit] << LOG_LINEAR_SPAN;
 
@@ -328,8 +391,47 @@ inline void Rasterizer :: RasterScanLine(RasterInfo & rasterInfo, const EdgePos 
 			deltaTv[unit] = (endTv[unit] - tv[unit]) >> LOG_LINEAR_SPAN;
 		}
 
-		int count = LINEAR_SPAN; 
+		int count = LINEAR_SPAN;
+#ifdef RE3_GENERIC
+		const I64 finalDepth = I64(depth) + I64(deltaDepth) * LINEAR_SPAN;
+		if (batchSupported && x >= 0 && x <= rasterInfo.SurfaceWidth - LINEAR_SPAN &&
+			finalDepth >= INT_MIN && finalDepth <= INT_MAX) {
+			span.texture = m_State->m_Texture[0].Enabled ?
+				rasterInfo.Textures[0] + rasterInfo.MipmapLevel[0] : 0;
+			span.color = rasterInfo.ColorBuffer + x;
+			span.alpha = rasterInfo.AlphaBuffer + x;
+			span.depth = rasterInfo.DepthBuffer + x;
+			span.x = x;
+			span.color_start[0] = baseColor.r;
+			span.color_start[1] = baseColor.g;
+			span.color_start[2] = baseColor.b;
+			span.color_start[3] = baseColor.a;
+			span.depth_start = depth;
+			span.fog_start = fogDensity;
+			span.u_start = tu[0];
+			span.u_step = deltaTu[0];
+			span.v_start = tv[0];
+			span.v_step = deltaTv[0];
+			simd.span8(span);
+			if (rg_gles_profile) rg_gles_profile->avx_pixels += LINEAR_SPAN;
+			baseColor.r = I32(U32(baseColor.r) + U32(colorIncrement.r) * LINEAR_SPAN);
+			baseColor.g = I32(U32(baseColor.g) + U32(colorIncrement.g) * LINEAR_SPAN);
+			baseColor.b = I32(U32(baseColor.b) + U32(colorIncrement.b) * LINEAR_SPAN);
+			depth = I32(U32(depth) + U32(deltaDepth) * LINEAR_SPAN);
+			fogDensity = I32(U32(fogDensity) + U32(deltaFog) * LINEAR_SPAN);
+			z = I32(U32(z) + U32(deltaZ) * LINEAR_SPAN);
+			for (unit = 0; unit < EGL_NUM_TEXTURE_UNITS; ++unit) {
+				tu[unit] = I32(U32(tu[unit]) + U32(deltaTu[unit]) * LINEAR_SPAN);
+				tv[unit] = I32(U32(tv[unit]) + U32(deltaTv[unit]) * LINEAR_SPAN);
+			}
+			x += LINEAR_SPAN;
+			continue;
+		}
+#endif
 
+#ifdef RE3_GENERIC
+		if (rg_gles_profile) rg_gles_profile->scalar_pixels += LINEAR_SPAN;
+#endif
 		do {
 			Fragment(&rasterInfo, x, depth, tu, tv, baseColor, fogDensity);
 
@@ -373,22 +475,52 @@ inline void Rasterizer :: RasterScanLine(RasterInfo & rasterInfo, const EdgePos 
 		}
 #endif
 
-		EGL_Fixed endZ = EGL_Inverse(invZ + deltaX * deltaInvZ);
-		EGL_Fixed invSpan = EGL_Inverse(EGL_FixedFromInt(xEnd - x));
+		EGL_Fixed endZ = hasTexture ? EGL_Inverse(invZ + deltaX * deltaInvZ) : 0;
+		EGL_Fixed invSpan = hasTexture ? EGL_Inverse(EGL_FixedFromInt(xEnd - x)) : 0;
 		EGL_Fixed deltaZ = EGL_Mul(endZ - z, invSpan);
 
 		EGL_Fixed endTu[EGL_NUM_TEXTURE_UNITS];
 		EGL_Fixed endTv[EGL_NUM_TEXTURE_UNITS];
-		EGL_Fixed deltaTu[EGL_NUM_TEXTURE_UNITS];
-		EGL_Fixed deltaTv[EGL_NUM_TEXTURE_UNITS];
+		EGL_Fixed deltaTu[EGL_NUM_TEXTURE_UNITS] = {};
+		EGL_Fixed deltaTv[EGL_NUM_TEXTURE_UNITS] = {};
 
 		for (unit = 0; unit < EGL_NUM_TEXTURE_UNITS; ++unit) {
+			if (!rasterInfo.Textures[unit])
+				continue;
 			endTu[unit] = EGL_Mul(invTu[unit] + deltaX * deltaInvU[unit], endZ);
 			endTv[unit] = EGL_Mul(invTv[unit] + deltaX * deltaInvV[unit], endZ);
 			deltaTu[unit] = EGL_Mul(endTu[unit] - tu[unit], invSpan);
 			deltaTv[unit] = EGL_Mul(endTv[unit] - tv[unit], invSpan);
 		}
 
+#ifdef RE3_GENERIC
+		const I64 lastDepth = I64(depth) + I64(deltaDepth) * (deltaX - 1);
+		if (batchSupported && deltaX >= 2 && x >= 0 && x <= rasterInfo.SurfaceWidth - LINEAR_SPAN &&
+			lastDepth >= INT_MIN && lastDepth <= INT_MAX) {
+			span.texture = m_State->m_Texture[0].Enabled ? rasterInfo.Textures[0] + rasterInfo.MipmapLevel[0] : 0;
+			span.color = rasterInfo.ColorBuffer + x;
+			span.alpha = rasterInfo.AlphaBuffer + x;
+			span.depth = rasterInfo.DepthBuffer + x;
+			span.x = x;
+			span.color_start[0] = baseColor.r;
+			span.color_start[1] = baseColor.g;
+			span.color_start[2] = baseColor.b;
+			span.color_start[3] = baseColor.a;
+			span.depth_start = depth;
+			span.fog_start = fogDensity;
+			span.u_start = tu[0];
+			span.u_step = deltaTu[0];
+			span.v_start = tv[0];
+			span.v_step = deltaTv[0];
+			span.count = deltaX;
+			simd.span8(span);
+			if (rg_gles_profile) rg_gles_profile->avx_pixels += deltaX;
+			return;
+		}
+#endif
+#ifdef RE3_GENERIC
+		if (rg_gles_profile) rg_gles_profile->tail_pixels += xEnd - x;
+#endif
 		for (; x < xEnd; ++x) {
 
 			Fragment(&rasterInfo, x, depth, tu, tv, baseColor, fogDensity);

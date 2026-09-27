@@ -48,6 +48,10 @@
 #include "Color.h"
 
 
+#ifdef RE3_GENERIC
+struct RG_Avx2Core;
+#endif
+
 namespace EGL {
 	class Rasterizer;
 	class MultiTexture;
@@ -56,6 +60,9 @@ namespace EGL {
 
 		friend class Rasterizer;
 		friend class CodeGenerator;
+#ifdef RE3_GENERIC
+		friend struct ::RG_Avx2Core;
+#endif
 
 	public:
 		enum Limits {

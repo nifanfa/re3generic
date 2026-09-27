@@ -3,6 +3,8 @@
 #include "Config.h"
 #include "Context.h"
 #include "Surface.h"
+#include "Simd.h"
+#include "GlesProfile.h"
 
 #include <new>
 
@@ -39,6 +41,8 @@ RG_SoftwareRenderer *rg_renderer_create(uint32_t width, uint32_t height)
     renderer->context->SetDrawSurface(renderer->surface);
     renderer->context->SetReadSurface(renderer->surface);
     EGL::Context::SetCurrentContext(renderer->context);
+    fprintf(stderr, "Renderer SIMD: %s\n", rg_simd_ops().name);
+    rg_profile_init();
     return renderer;
 }
 
@@ -65,8 +69,13 @@ uint32_t rg_renderer_pitch(const RG_SoftwareRenderer *renderer)
 void rg_renderer_present(const RG_SoftwareRenderer *renderer)
 {
     const RG_Port *port = rg_bound_port();
-    if (renderer && port)
-        port->present(port->userdata, rg_renderer_pixels(renderer),
-                      renderer->surface->GetWidth(), renderer->surface->GetHeight(),
-                      rg_renderer_pitch(renderer), RG_PIXEL_RGB565);
+    if (renderer && port) {
+        {
+            RG_ProfileScope scope(rg_gles_profile ? &rg_gles_profile->present_ns : 0);
+            port->present(port->userdata, rg_renderer_pixels(renderer),
+                          renderer->surface->GetWidth(), renderer->surface->GetHeight(),
+                          rg_renderer_pitch(renderer), RG_PIXEL_RGB565);
+        }
+        rg_profile_frame();
+    }
 }

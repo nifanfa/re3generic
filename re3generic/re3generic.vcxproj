@@ -80,6 +80,11 @@
       <PreprocessorDefinitions>WIN32;STATIC_GLES;RE3_GENERIC;EGL_NO_COMPILE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>RG_HAVE_AVX2;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -154,6 +159,13 @@
     <ClCompile Include="software\ContextGeneric.cpp" />
     <ClCompile Include="software\Surface.cpp" />
     <ClCompile Include="software\SoftwareRenderer.cpp" />
+    <ClCompile Include="software\Simd.cpp" />
+    <ClCompile Include="software\GlesProfile.cpp" />
+    <ClCompile Include="software\SimdAvx2.cpp">
+      <ExcludedFromBuild Condition="'$(Platform)'!='x64'">true</ExcludedFromBuild>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+    </ClCompile>
     <ClCompile Include="vendor\vincent\src\Config.cpp" />
     <ClCompile Include="vendor\vincent\src\Context.cpp" />
     <ClCompile Include="vendor\vincent\src\ContextBuffer.cpp" />
@@ -183,6 +195,10 @@
     <ClCompile Include="vendor\vincent\src\Utils.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <ClInclude Include="software\Simd.h" />
+    <ClInclude Include="software\GlesProfile.h" />
+  </ItemGroup>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

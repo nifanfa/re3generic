@@ -455,6 +455,10 @@ namespace {
 // --------------------------------------------------------------------------
 void Rasterizer :: RasterTriangle(const RasterPos& a, const RasterPos& b,
 								  const RasterPos& c) {
+#ifdef RE3_GENERIC
+	RG_ProfileScope scope(rg_gles_profile ? &rg_gles_profile->triangle_ns : 0);
+	if (rg_gles_profile) ++rg_gles_profile->triangles;
+#endif
 	
 	// ----------------------------------------------------------------------
 	// sort vertices by y
