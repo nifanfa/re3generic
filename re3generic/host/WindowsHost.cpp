@@ -13,6 +13,13 @@ static HWND game_window;
 static RG_InputEvent input_queue[256];
 static unsigned input_head;
 static unsigned input_tail;
+static uint32_t game_width;
+static uint32_t game_height;
+static int mouse_x;
+static int mouse_y;
+static int mouse_delta_x;
+static int mouse_delta_y;
+static bool mouse_moved;
 static FILE *pcm_file;
 static HWAVEOUT audio_device;
 static struct {
@@ -23,6 +30,53 @@ static struct {
 } audio_blocks[8];
 static unsigned next_audio_block;
 static bool audio_reported;
+
+static void push_input(RG_InputType type, int code, int value = 0, int value_y = 0)
+{
+    unsigned next = (input_tail + 1) % 256;
+    if (next != input_head) {
+        input_queue[input_tail] = { type, code, value, value_y };
+        input_tail = next;
+    }
+}
+
+static void clip_mouse(HWND window)
+{
+    RECT bounds;
+    if (GetClientRect(window, &bounds)) {
+        POINT top_left = { bounds.left, bounds.top };
+        POINT bottom_right = { bounds.right, bounds.bottom };
+        ClientToScreen(window, &top_left);
+        ClientToScreen(window, &bottom_right);
+        bounds = { top_left.x, top_left.y, bottom_right.x, bottom_right.y };
+        ClipCursor(&bounds);
+    }
+}
+
+static void move_mouse(HWND window, LPARAM position)
+{
+    RECT bounds;
+    GetClientRect(window, &bounds);
+    int client_width = bounds.right;
+    int client_height = bounds.bottom;
+    if (client_width <= 0 || client_height <= 0)
+        return;
+    int target_width = client_width;
+    int target_height = client_height;
+    if ((int64_t)target_width * game_height > (int64_t)target_height * game_width)
+        target_width = MulDiv(target_height, game_width, game_height);
+    else
+        target_height = MulDiv(target_width, game_height, game_width);
+    if (!target_width || !target_height)
+        return;
+    int x = (short)LOWORD(position) - (client_width - target_width) / 2;
+    int y = (short)HIWORD(position) - (client_height - target_height) / 2;
+    x = x < 0 ? 0 : x > target_width ? target_width : x;
+    y = y < 0 ? 0 : y > target_height ? target_height : y;
+    mouse_x = MulDiv(x, game_width, target_width);
+    mouse_y = MulDiv(y, game_height, target_height);
+    mouse_moved = true;
+}
 
 static void report_audio_error(const char *operation, MMRESULT result)
 {
@@ -77,23 +131,79 @@ static void push_key(RG_InputType type, WPARAM virtual_key, LPARAM key_info)
 static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
     switch (message) {
+    case WM_CREATE: {
+        RAWINPUTDEVICE mouse = { 0x01, 0x02, 0, window };
+        RegisterRawInputDevices(&mouse, 1, sizeof(mouse));
+        return 0;
+    }
+    case WM_INPUT: {
+        RAWINPUT input;
+        UINT size = sizeof(input);
+        if (GetRawInputData((HRAWINPUT)lparam, RID_INPUT, &input, &size, sizeof(RAWINPUTHEADER)) != (UINT)-1 &&
+            input.header.dwType == RIM_TYPEMOUSE && !(input.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) &&
+            (input.data.mouse.lLastX || input.data.mouse.lLastY)) {
+            mouse_delta_x += input.data.mouse.lLastX;
+            mouse_delta_y += input.data.mouse.lLastY;
+        }
+        return DefWindowProcA(window, message, wparam, lparam);
+    }
+    case WM_MOUSEMOVE: move_mouse(window, lparam); return 0;
+    case WM_LBUTTONDOWN: push_input(RG_INPUT_MOUSE_BUTTON_DOWN, RG_MOUSE_LEFT); return 0;
+    case WM_LBUTTONUP: push_input(RG_INPUT_MOUSE_BUTTON_UP, RG_MOUSE_LEFT); return 0;
+    case WM_RBUTTONDOWN: push_input(RG_INPUT_MOUSE_BUTTON_DOWN, RG_MOUSE_RIGHT); return 0;
+    case WM_RBUTTONUP: push_input(RG_INPUT_MOUSE_BUTTON_UP, RG_MOUSE_RIGHT); return 0;
+    case WM_MBUTTONDOWN: push_input(RG_INPUT_MOUSE_BUTTON_DOWN, RG_MOUSE_MIDDLE); return 0;
+    case WM_MBUTTONUP: push_input(RG_INPUT_MOUSE_BUTTON_UP, RG_MOUSE_MIDDLE); return 0;
+    case WM_XBUTTONDOWN:
+    case WM_XBUTTONUP:
+        push_input(message == WM_XBUTTONDOWN ? RG_INPUT_MOUSE_BUTTON_DOWN : RG_INPUT_MOUSE_BUTTON_UP,
+                   HIWORD(wparam) == XBUTTON1 ? RG_MOUSE_X1 : RG_MOUSE_X2);
+        return TRUE;
+    case WM_MOUSEWHEEL: push_input(RG_INPUT_MOUSE_WHEEL, 0, (short)HIWORD(wparam)); return 0;
+    case WM_SETFOCUS: clip_mouse(window); return 0;
+    case WM_KILLFOCUS:
+        ClipCursor(NULL);
+        input_head = input_tail = 0;
+        mouse_moved = false;
+        mouse_delta_x = mouse_delta_y = 0;
+        push_input(RG_INPUT_MOUSE_RESET, 0);
+        return 0;
+    case WM_MOVE:
+    case WM_SIZE:
+        if (GetFocus() == window) clip_mouse(window);
+        break;
+    case WM_SETCURSOR:
+        if (LOWORD(lparam) == HTCLIENT) { SetCursor(NULL); return TRUE; }
+        break;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN: push_key(RG_INPUT_KEY_DOWN, wparam, lparam); return 0;
     case WM_KEYUP:
     case WM_SYSKEYUP: push_key(RG_INPUT_KEY_UP, wparam, lparam); return 0;
     case WM_CLOSE: DestroyWindow(window); return 0;
-    case WM_DESTROY: game_window = NULL; PostQuitMessage(0); return 0;
-    default: return DefWindowProcA(window, message, wparam, lparam);
+    case WM_DESTROY: ClipCursor(NULL); game_window = NULL; PostQuitMessage(0); return 0;
+    default: break;
     }
+    return DefWindowProcA(window, message, wparam, lparam);
 }
 
 static int poll_input(void *, RG_InputEvent *event)
 {
-    if (input_head == input_tail)
-        return 0;
-    *event = input_queue[input_head];
-    input_head = (input_head + 1) % 256;
-    return 1;
+    if (input_head != input_tail) {
+        *event = input_queue[input_head];
+        input_head = (input_head + 1) % 256;
+        return 1;
+    }
+    if (mouse_moved) {
+        *event = { RG_INPUT_MOUSE_MOVE, 0, mouse_x, mouse_y };
+        mouse_moved = false;
+        return 1;
+    }
+    if (mouse_delta_x || mouse_delta_y) {
+        *event = { RG_INPUT_MOUSE_DELTA, 0, mouse_delta_x, mouse_delta_y };
+        mouse_delta_x = mouse_delta_y = 0;
+        return 1;
+    }
+    return 0;
 }
 
 static uint64_t ticks_ms(void *) { return GetTickCount64(); }
@@ -223,6 +333,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "Usage: re3host <GTA III game directory> [width height]\n");
         return 1;
     }
+    game_width = width;
+    game_height = height;
     FILE *image = fopen("models\\gta3.img", "rb");
     FILE *data = fopen("data\\gta3.dat", "rb");
     if (!image || !data) {

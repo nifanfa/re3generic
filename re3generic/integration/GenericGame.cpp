@@ -16,6 +16,27 @@ extern "C" void rg_audio_pump(void);
 
 static bool initialised;
 static bool playing;
+static int32_t mouse_delta_x;
+static int32_t mouse_delta_y;
+static int32_t mouse_wheel;
+static bool mouse_buttons[5];
+
+extern "C" void rg_generic_mouse_update(CMouseControllerState *state)
+{
+    state->Clear();
+    int sign_x = !FrontEndMenuManager.m_bMenuActive && MousePointerStateHelper.bInvertHorizontally ? -1 : 1;
+    int sign_y = !FrontEndMenuManager.m_bMenuActive && MousePointerStateHelper.bInvertVertically ? -1 : 1;
+    state->x = (float)(sign_x * (int64_t)mouse_delta_x);
+    state->y = (float)(sign_y * (int64_t)mouse_delta_y);
+    state->LMB = mouse_buttons[RG_MOUSE_LEFT];
+    state->RMB = mouse_buttons[RG_MOUSE_RIGHT];
+    state->MMB = mouse_buttons[RG_MOUSE_MIDDLE];
+    state->MXB1 = mouse_buttons[RG_MOUSE_X1];
+    state->MXB2 = mouse_buttons[RG_MOUSE_X2];
+    state->WHEELUP = mouse_wheel > 0;
+    state->WHEELDN = mouse_wheel < 0;
+    mouse_delta_x = mouse_delta_y = mouse_wheel = 0;
+}
 
 int rg_game_init(uint32_t width, uint32_t height)
 {
@@ -60,6 +81,21 @@ int rg_game_step(void)
             RsKeyStatus status = {};
             status.keyCharCode = (RsKeyCodes)event.code;
             RsKeyboardEventHandler(event.type == RG_INPUT_KEY_DOWN ? rsKEYDOWN : rsKEYUP, &status);
+        } else if (event.type == RG_INPUT_MOUSE_MOVE) {
+            FrontEndMenuManager.m_nMouseTempPosX = event.value;
+            FrontEndMenuManager.m_nMouseTempPosY = event.value_y;
+        } else if (event.type == RG_INPUT_MOUSE_DELTA) {
+            mouse_delta_x += event.value;
+            mouse_delta_y += event.value_y;
+        } else if (event.type == RG_INPUT_MOUSE_WHEEL) {
+            mouse_wheel += event.value;
+        } else if (event.type == RG_INPUT_MOUSE_BUTTON_DOWN || event.type == RG_INPUT_MOUSE_BUTTON_UP) {
+            if (event.code >= RG_MOUSE_LEFT && event.code <= RG_MOUSE_X2)
+                mouse_buttons[event.code] = event.type == RG_INPUT_MOUSE_BUTTON_DOWN;
+        } else if (event.type == RG_INPUT_MOUSE_RESET) {
+            mouse_delta_x = mouse_delta_y = mouse_wheel = 0;
+            for (unsigned button = 0; button < 5; ++button)
+                mouse_buttons[button] = false;
         }
     }
 

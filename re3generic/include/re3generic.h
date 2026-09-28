@@ -21,8 +21,19 @@ typedef enum RG_InputType {
     RG_INPUT_MOUSE_BUTTON_UP,
     RG_INPUT_PAD_BUTTON_DOWN,
     RG_INPUT_PAD_BUTTON_UP,
-    RG_INPUT_PAD_AXIS
+    RG_INPUT_PAD_AXIS,
+    RG_INPUT_MOUSE_DELTA,
+    RG_INPUT_MOUSE_WHEEL,
+    RG_INPUT_MOUSE_RESET
 } RG_InputType;
+
+typedef enum RG_MouseButton {
+    RG_MOUSE_LEFT = 0,
+    RG_MOUSE_RIGHT = 1,
+    RG_MOUSE_MIDDLE = 2,
+    RG_MOUSE_X1 = 3,
+    RG_MOUSE_X2 = 4
+} RG_MouseButton;
 
 typedef enum RG_KeyCode {
     RG_KEY_ESCAPE = 1000,

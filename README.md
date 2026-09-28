@@ -35,7 +35,7 @@ resolutions. A standalone orientation check passed at 320x240, 480x360,
 640x480, 800x600, and 1024x1024; the 640x480 game menu was also visually verified.
 
 The host checks for `models/gta3.img` and `data/gta3.dat`. The Windows host
-opens a window, sends keyboard events to re3, and presents Vincent's RGB565
+opens a window, sends keyboard and mouse events to re3, and presents Vincent's RGB565
 framebuffer with 24-bit depth and synchronous resource reads. The Vincent
 framebuffer stores the bottom scanline first. The
 Release x64 host has reached the main menu, started a new game, and rendered
@@ -52,6 +52,15 @@ time, random-access file reads, and optional PCM output. Bind a single `RG_Port`
 `rg_game_shutdown`. `re3generic/include/re3generic_game.h` declares those game
 functions. The host must keep file handles open until `file_close`; reads may
 stall the frame.
+
+For mouse input, `RG_INPUT_MOUSE_MOVE` carries absolute framebuffer coordinates
+in `value` and `value_y` for menus. `RG_INPUT_MOUSE_DELTA` carries relative
+mouse movement in the same fields for camera control. Mouse button down/up
+events use `RG_MOUSE_LEFT` through `RG_MOUSE_X2` in `code`; wheel events use a
+signed `value` (positive is up). Send `RG_INPUT_MOUSE_RESET` when focus is lost
+to release held buttons. The Windows host scales cursor coordinates with the
+letterboxed framebuffer, uses raw mouse input for unbounded relative movement,
+and confines the cursor to the client area only while the window has focus.
 
 ## Audio
 

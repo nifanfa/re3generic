@@ -12,6 +12,9 @@
 #endif
 
 #include "Pad.h"
+#ifdef RE3_GENERIC
+extern "C" void rg_generic_mouse_update(CMouseControllerState *state);
+#endif
 #include "ControllerConfig.h"
 #include "Timer.h"
 #include "Frontend.h"
@@ -526,7 +529,11 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
 			state.WHEELUP = true;
 		}
 	}
-#elif defined __SYMBIAN32__ || defined RE3_GENERIC
+#elif defined RE3_GENERIC
+	state.LMB = state.RMB = state.MMB = true;
+	state.MXB1 = state.MXB2 = true;
+	state.WHEELUP = state.WHEELDN = true;
+#elif defined __SYMBIAN32__
 	// TODO
 	state.LMB = true;
 #else
@@ -550,7 +557,11 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
 
 void CPad::UpdateMouse()
 {
-#if defined RW_D3D9 || defined RWLIBS
+#ifdef RE3_GENERIC
+	OldMouseControllerState = NewMouseControllerState;
+	rg_generic_mouse_update(&PCTempMouseControllerState);
+	NewMouseControllerState = PCTempMouseControllerState;
+#elif defined RW_D3D9 || defined RWLIBS
 	if ( IsForegroundApp() )
 	{
 		if ( PSGLOBAL(mouse) == nil )
