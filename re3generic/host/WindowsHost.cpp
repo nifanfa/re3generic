@@ -143,7 +143,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
             input.header.dwType == RIM_TYPEMOUSE && !(input.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) &&
             (input.data.mouse.lLastX || input.data.mouse.lLastY)) {
             mouse_delta_x += input.data.mouse.lLastX;
-            mouse_delta_y += input.data.mouse.lLastY;
+            mouse_delta_y -= input.data.mouse.lLastY;
         }
         return DefWindowProcA(window, message, wparam, lparam);
     }
